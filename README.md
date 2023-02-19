@@ -16,3 +16,5 @@ controls when on bitmask edit mode: (the cursor should appear)
 you can only cycle between POKE, WRITE, READ and QUIT when on SFR/test mode
 
 rows on POKE mode - leftmost: 0-write result, rightmost: 1-write result
+
+NOTICE: SFR.I is taken from https://github.com/jahan-addison/snake
