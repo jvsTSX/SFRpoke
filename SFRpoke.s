@@ -1,8 +1,8 @@
 	.org 0   ; entry point
   jmpf Start
-	.org $03 ; External int. (INTO)                 - IO1CR
+	.org $03 ; External int. (INT0)                 - I01CR
   reti
-	.org $0B ; External int. (INT1)                 - IO1CR
+	.org $0B ; External int. (INT1)                 - I01CR
   reti
 	.org $13 ; External int. (INT2) and Timer 0 low - I23CR and T0CNT
   reti
@@ -16,17 +16,18 @@
   reti
 	.org $3B ; Serial IO 2                          - SCON1
   reti
-	.org $43 ; VMU to VMU comms                     - not listed? (160h/161h)
+	.org $43 ; Maple                                - 160 and 161
   reti
 	.org $4B ; Port 3 interrupt                     - P3INT
+	clr1 P3INT, 1
+	mov #$F0, WaitCount
   reti
-  
-  
- 	.org	$1f0 ; exit app mode
+
+
+ 	.org	$1F0 ; exit app mode
 goodbye:	
-	not1	ext,0
+	not1	EXT, 0
 	jmpf	goodbye
-  
   
   
 	.org $200
@@ -41,520 +42,620 @@ goodbye:
 ;  /////////////////////////////////////////////////////////////
 
 	.include "sfr.i" 
-CurrentFrame = $4
-LastKeys =     $5
-SFRtoPoke =    $6
-SFRpoked0 =    $7
-SFRpoked1 =    $8
-PokeMask =     $9 ; bits to not write to so you can test the other bits in PCON for example
-Dummy =        $A ; to test open bus, a dummy write is done here before reading back the result
-CurrentMode =  $B
-LastMode =     $C
-Cursor =       $D
-SelMode =      $E
-
-	
+LastKeys =      $5
+SFRselect =     $6
+SFRread =       $7
+PokeMask =      $8
+Dummy =         $9 ; to test open bus, a dummy write to RAM is done here before reading back the result
+PokeMode =      $A
+CursorInt =     $B
+CursorBit =     $C
+LastCurInt =    $D
+WaitCount =     $E ; will count some interations of the main loop and sleep when it hits zero
+Flags =         $F 
+; b7 = update 'W' row
+; b6 = update 'R' row
+; b5 = update SFR number
+; b4 = update mode indicator
+; b3 = update cursor
+; b2 = unused
+; b1 = unused
+; b0 = select mode (1 = bit edit mode)
 	
 ; ////// START 
 Start: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	mov #0, IE    ; disable ints to configure them first
-	mov #%10000000, VCCR
-	mov #%00001001, MCR
-	mov #%10000001, OCR
-	mov #0, P3INT ; i don't want joypad ints
-	
-	; setup T0
-	mov #%01000001, T0CON ; Low running, int enabled
-	mov #0, T0PRR
-	mov #1, T0L
-	mov #$BF, T0LR
-	
-	; i don't know what these do but they enable T1 to output audio to P1
-	mov #$80, P1FCR
-	clr1 P1, 7
-	mov #$80, P1DDR
-	mov #%11010000, T1CNT ; except this one
-	mov #$80, IE
-	
-	mov #$FF, LastKeys
-	mov #0, SFRtoPoke
-	mov #0, CurrentFrame
-	
-	mov #1, Cursor
-	mov #0, CurrentMode
-	mov #1, LastMode
-	mov #0, SelMode
-	mov #0, PokeMask
-	
-	mov #$80, P1DDR
-	mov #$80, P1FCR
-	
-MainLoop: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;	not1 P1, 7 ; T0 timing check
-	
-	ld P3 ; get keys from port 3
-	st B
-;	st $183 ; input test
-	ld LastKeys
-  be B, .SkipInputs
-
-	push B
-	st C
-	callf DoInputs
-	pop B
-	ld B
-	st LastKeys
-.SkipInputs:
-	
-
-; check modes to wipe the screen and change text if needed
-	ld CurrentMode
-  be LastMode, .NoScreenUpdate
-	
-	st LastMode
 	xor ACC
-	st XBNK
-	mov #$81, 2
-.copyloop:
-	mov #0, @r2
-	inc 2
-	mov #0, @r2
-	inc 2
-	mov #0, @r2
-	
-	ld 2
-	add #4
-	st 2
-	
-	mov #0, @r2
-	inc 2
-	mov #0, @r2
-	inc 2
-	mov #0, @r2
-	
-	ld 2
-	add #8
-	st 2
-  bn PSW, 7, .copyloop
-  bp XBNK, 0, .exitloop
-	inc XBNK
-	set1 2, 7
-  br .copyloop
-.exitloop:
-	
-	; update the text in the corner
-	mov #<ModeNames, TRL
-	mov #>ModeNames, TRH
-	ld CurrentMode
-	rol
-	rol
-	rol
-	st C
-	
-	ld C
-	ldc
-	st $1E4
-	inc C
-	ld C
-	ldc
-	st $1E5
-	inc C
-	ld C
-	ldc
-	st $1EA
-	inc C
-	ld C
-	ldc
-	st $1EB
-	inc C
-	ld C
-	ldc
-	st $1F4
-	inc C
-	ld C
-	ldc
-	st $1F5
-	inc C
-	ld C
-	ldc
-	st $1FA
-	inc C
-	ld C
-	ldc
-	st $1FB
-.NoScreenUpdate:
-	
-	; draw the cursor
-	mov #<ZeroIcon, TRL
-	mov #>ZeroIcon, TRH
-  bp CurrentMode, 1, .OtherModes
-  bn CurrentMode, 0, .BothRows
-	; draw mask row
-	xor ACC
-	st XBNK
-	st B
-	ld PokeMask
-	st C
-	mov #$83, 2
-  callf DrawBitReadsRow
+;	st IE    ; disable ints to configure them first
+;	st P3INT ; i don't want joypad ints
+	mov #%10000000, VCCR ; LCD ON
+	mov #%00001001, MCR ; LCD REFRESH ON, LCD GRAPHICS MODE, 83HZ
+	mov #%10100001, OCR
 
-  bn SelMode, 0, .NoCursor
-; show cursor pos
-  bn Cursor, 0, .notat0
-	set1 $189, 1
-.notat0:
-  bn Cursor, 1, .notat1
-	set1 $1A9, 1
-.notat1:
-  bn Cursor, 2, .notat2
-	set1 $1C9, 1
-.notat2:
-  bn Cursor, 3, .notat3
-	set1 $1E9, 1
-.notat3:
-	inc XBNK
-  bn Cursor, 4, .notat4
-	set1 $189, 1
-.notat4:
-  bn Cursor, 5, .notat5
-	set1 $1A9, 1
-.notat5:
-  bn Cursor, 6, .notat6
-	set1 $1C9, 1
-.notat6:
-  bn Cursor, 7, .notat7
-	set1 $1E9, 1
-.notat7:
-	dec XBNK
-.NoCursor:
-	
-	; draw other rows
-  bp CurrentMode, 0, .SkipDraw ; if write (01), skip
-.BothRows:
-	
-	xor ACC ; draw 1 row (middle)
-	st XBNK
-	st B
-	ld SFRpoked1
-	st C
-	mov #$82, 2
-  callf DrawBitReadsRow
-	
-.OnlyFirstRow:
-	xor ACC ; draw 0 row (first)
-	st XBNK
-	st B
-	ld SFRpoked0
-	st C
-	mov #$81, 2
-  callf DrawBitReadsRow
-  br .SkipDraw
-	
-.OtherModes:
-  bp CurrentMode, 0, .SkipDraw ; if quit (11), skip
-  br .OnlyFirstRow
-.SkipDraw:
-
-	xor ACC
-	st XBNK
-  callf DrawSFRnumber ; draw what SFR is selected
-  jmpf DrawBitNumber  ; refresh the bit indicators
-backfrombitnumber:
-	mov #1, PCON
-  jmp MainLoop
-
-	
-	
-	
-	
-DoInputs:  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  bp SelMode, 0, .BitmaskControls
-	
-	; otherwise regular controls
-  bp C, 0, .NoKeyUp
-	ld SFRtoPoke
-	add #$10
-	st SFRtoPoke
-.NoKeyUp:
-
-  bp C, 1, .NoKeyDown
-	ld SFRtoPoke
-	sub #$10
-	st SFRtoPoke
-.NoKeyDown:
-
-  bp C, 2, .NoKeyLeft
-	dec SFRtoPoke
-.NoKeyLeft:
-
-  bp C, 3, .NoKeyRight
-	inc SFRtoPoke
-.NoKeyRight:
-
-	push C
-  bp C, 4, .NoA
-  bp CurrentMode, 1, .ReadOrQuit
-	; or else first two
-  bn CurrentMode, 0, .Poke
-  br .Write
-	
-.ReadOrQuit:
-  bn CurrentMode, 0, .Read
-	mov #0, IE
-  jmpf goodbye
-	
-.Poke:
-	ld SFRtoPoke
-	st 2
-	xor ACC
-;	ld @r2
-;	and PokeMask
-	st @r2
-	mov #$AA, ACC
-	st Dummy
-	ld @r2
-	st SFRpoked0
-
-	mov #$FF, ACC	
-;	ld @r2
-;	or PokeMask
-	st @r2
-	mov #$AA, ACC
-	st Dummy
-	ld @r2
-	st SFRpoked1
-  br .NoA
-	
-.Write:
-	ld SFRtoPoke
-	st 2
-	ld PokeMask
-	st @r2
-  br .NoA
-	
-.Read:
-	ld SFRtoPoke
-	st 2
-	ld @r2
-	st SFRpoked0
-.NoA:
-	pop C
-
-  bp C, 5, .NoB
-	bp CurrentMode, 1, .NoB
-	bn CurrentMode, 0, .NoB
-	not1 SelMode, 0
-.NoB:
-
-  bp C, 7, .NoSlp
-	inc CurrentMode
-	ld CurrentMode
-  bne #4, .NoSlp
-	mov #0, CurrentMode
-.NoSlp:
-  ret
-
-
-
-.BitmaskControls: ;;;;;;;
-  bp C, 0, .NoKeyUpBM
-	ld Cursor
-	ror
-	st Cursor
-.NoKeyUpBM:
-
-  bp C, 1, .NoKeyDownBM
-	ld Cursor
-	rol
-	st Cursor
-.NoKeyDownBM:	
-	
-  bp C, 4, .NoABM
-	ld PokeMask
-	xor Cursor
+	mov #%11110000, Flags
+	mov #$FF, LastCurInt
+	mov #$01, CursorBit
+	mov #$F0, WaitCount
+	st PokeMode
+	st SFRselect
+	st SFRread
+	st CursorInt
 	st PokeMask
-.NoABM:
+	st LastKeys
+	
+	clr1 T1CNT, 7
+	clr1 BTCR, 6
+	mov #%00000101, P3INT
 
-  bp C, 5, .NoBBM
-	not1 SelMode, 0
-.NoBBM:
-  ret
+	; initialize screen
+	mov #$80, 2
+	mov #0, XBNK
+.Loop:
+	mov #0, @r2 ; line 1
+	inc 2
+	mov #0, @r2
+	inc 2
+	mov #0, @r2
+	inc 2
+	mov #0, @r2
+	inc 2
+	mov #0, @r2
+	inc 2
+	mov #0, @r2
+	inc 2
+	mov #0, @r2 ; line 2
+	inc 2
+	mov #0, @r2
+	inc 2
+	mov #0, @r2
+	inc 2
+	mov #0, @r2
+	inc 2
+	mov #0, @r2
+	inc 2
+	mov #0, @r2
+	ld 2
+	add #5
+	st 2
+  bnz .Loop
+  bp XBNK, 0, .LoopDone
+	inc XBNK
+	mov #80, 2
+  br .Loop
+.LoopDone:
+
+
+; copy the bits row
+	mov #<BitNumbers, TRL
+	mov #>BitNumbers, TRH
+	mov #0, C
+	mov #$80, 2
+	mov #0, XBNK
+
+	call RowCopy ; draw the bits indication
+
+
+; draw letters for indicating what row is what
+	mov #<ReadIcon, TRL
+	mov #>ReadIcon, TRH
+	mov #0, C
+	mov #$D1, 2
+	; XBNK is 1 already
 	
+	call RowCopy ; draw R icon
 	
+	mov #$D4, 2
+	call RowCopy ; draw W icon
 	
-DrawSFRnumber: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	ld SFRtoPoke
-	and #%11110000
-	ror
-	ror
-	ror
-	ror
+	jmp EnterMain
+
+
+SkipInputs:
+  jmp EndMain
+
+MainLoop: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; MAIN START
+	ld P3 ; get keys from port 3
 	st C
-	xor ACC
-	mov #5, B
-	mul
-	ld C
 	
+;	st $185 ; input test
+
+	ld LastKeys
+  be C, SkipInputs
+	st B
+	ld C
+	st LastKeys
+  be #$FF, SkipInputs ; whenever the routine enters on key release
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; INPUTS
+  bp Flags, 0, BitEdit 
+; or else select	
+
+
+  bp C, 0, .NoUp    ; increment SFR selector's MSB
+	ld SFRselect
+	add #$10
+	st SFRselect
+	set1 Flags, 5
+.NoUp:
+
+
+  bp C, 1, .NoDown  ; decrement SFR selector's MSB
+	ld SFRselect
+	sub #$10
+	st SFRselect
+	set1 Flags, 5
+.NoDown:
+
+
+  bp C, 2, .NoLeft  ; decrement SFR selector's LSB
+	dec SFRselect
+	set1 Flags, 5
+.NoLeft:
+
+
+  bp C, 3, .NoRight ; increment SFR selector's LSB
+	inc SFRselect
+	set1 Flags, 5
+.NoRight:
+
+
+  bp C, 7, .NoSleep ; enter bit edit mode
+	not1 Flags, 0
+	set1 Flags, 3
+.NoSleep:
+
+  br CommonInputs
+
+
+BitEdit: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  bp C, 0, .NoUp ; move cursor up
+	dec CursorInt
+	ld CursorInt
+	and #%00000111
+	st CursorInt
+	ld CursorBit
+	ror
+	st CursorBit
+	set1 Flags, 3
+.NoUp:
+
+
+  bp C, 1, .NoDown ; move cursor down
+	inc CursorInt
+	ld CursorInt
+	and #%00000111
+	st CursorInt
+	ld CursorBit
+	rol
+	st CursorBit
+	set1 Flags, 3
+.NoDown:
+
+
+  bp C, 2, .NoLeft ; flip bit
+	ld PokeMask
+	xor CursorBit
+	st PokeMask
+	set1 Flags, 7
+	set1 Flags, 3
+.NoLeft:
+
+
+  bp C, 3, .NoRight ; flip bit
+	ld PokeMask
+	xor CursorBit
+	st PokeMask
+	set1 Flags, 7
+	set1 Flags, 3
+.NoRight:
+
+
+  bp C, 7, .NoSleep ; exit bit edit mode
+	not1 Flags, 0
+	mov #0, XBNK ; clear last cursor position, really dumb but fast
+	clr1 $189, 1
+	clr1 $1A9, 1
+	clr1 $1C9, 1
+	clr1 $1E9, 1
+	inc XBNK	
+	clr1 $189, 1
+	clr1 $1A9, 1
+	clr1 $1C9, 1
+	clr1 $1E9, 1
+.NoSleep:
+
+
+
+CommonInputs:	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  bp C, 4, .NoA ; write
+	ld SFRselect
+	st 2
+  bp PokeMode, 1, .WrSecondhalf
+  bp PokeMode, 0, .WrModeXRAM
+	; or else SFR mode
+	clr1 2, 7
+  br .WrEnd
+	
+.WrModeXRAM:
+	rolc
+	mov #0, ACC
+	rolc
+	st XBNK
+	set1 2, 7
+  br .WrEnd
+	
+.WrSecondhalf:
+  bn PokeMode, 0, .WrModeICON
+	set1 T1CNT, 7
+	set1 BTCR, 6
+  jmpf goodbye ; or else EXIT
+	
+.WrModeICON:
+	rolc
+	mov #1, ACC
+	rolc
+	st XBNK
+	set1 2, 7
+.WrEnd:
+	ld PokeMask
+	st @r2
+	set1 Flags, 7
+	
+	bn Flags, 0, .NoA
+	set1 Flags, 3
+.NoA:
+
+
+
+  bp C, 5, .NoB ; read
+	ld SFRselect
+	st 2
+  bp PokeMode, 1, .RdSecondHalf
+  bp PokeMode, 0, .RdModeXRAM
+	; or else SFR mode
+	clr1 2, 7
+  br .RdEnd
+	
+.RdModeXRAM:
+	rolc
+	mov #0, ACC
+	rolc
+	st XBNK
+	set1 2, 7
+  br .RdEnd
+
+.RdSecondHalf:
+  bp PokeMode, 0, .NoB
+	; or else ICON
+	rolc
+	mov #1, ACC
+	rolc
+	st XBNK
+	set1 2, 7
+.RdEnd:
+	mov #%01010101, ACC
+	st Dummy
+	ld Dummy
+	st Dummy
+	ld Dummy
+	ld @r2
+	st SFRread
+	set1 Flags, 6
+.NoB:
+	
+	
+  bp C, 6, .NoMode ; change mode
+	ld PokeMode
+	inc ACC
+	and #%00000011
+	st PokeMode
+	set1 Flags, 4
+	set1 Flags, 5
+.NoMode:
+	
+	
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; GRAPHICS UPDATE
+EnterMain: ; main loop starts at here for the first time, so graphics are initialized propperly
+
+  bn Flags, 7, .NoWriteRowRefresh
+	ld PokeMask
+	mov #$83, 2
+	call BitsDraw
+	clr1 Flags, 7
+.NoWriteRowRefresh:
+
+
+
+  bn Flags, 6, .NoReadRowRefresh
+	ld SFRread
+	mov #$82, 2
+	call BitsDraw
+	clr1 Flags, 6
+.NoReadRowRefresh:
+
+
+
+	; update SFR number indicator
+  bn Flags, 5, .NoSFRnoRefresh
 	mov #<NumbersDisplay, TRL
 	mov #>NumbersDisplay, TRH
-
-	ldc
-	st $184
-	inc C
-	ld C
-	ldc
-	st $18A
-	inc C
-	ld C
-	ldc
-	st $194
-	inc C
-	ld C
-	ldc
-	st $19A
-	inc C
-	ld C
-	ldc
-	st $1A4
-
-	
-	
-	ld SFRtoPoke ; low nibble
-	and #%00001111
-	st C
-	mov #5, B
-	xor ACC
-	mul
-	
-	ld C
-	ldc
-	st $185
-	inc C
-	ld C
-	ldc
-	st $18B
-	inc C
-	ld C
-	ldc
-	st $195
-	inc C
-	ld C
-	ldc
-	st $19B
-	inc C
-	ld C
-	ldc
-	st $1A5
-
-	
-	
-  ret ; end here
-	
-	
-	
-DrawBitReadsRow: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; NOTICE THE BYTE YOU WANT TO DISPLAY MUST BE IN C REG
-.copyloop:
-  bp C, 0, .BitIsOne
-	mov #0, B
-  br .Skip
-.BitIsOne:
-	mov #3, B
-.Skip:
-	
-	ld B
-	ldc 
-	st @r2
-	ld 2
-	add #6
-	st 2
-	
-	inc B
-	ld B
-	ldc
-	st @r2
-	ld 2
-	add #10
-	st 2
-	
-	inc B
-	ld B
-	ldc 
-	st @r2
-	ld 2
-	add #16
-	st 2
-	
-	ld C
+	mov #0, XBNK
+	mov #$84, 2
+	ld SFRselect
 	ror
+	ror
+	ror
+	ror
+	and #$0F
 	st C
+
+	ld PokeMode
+	bnz .DontResB7
+	clr1 C, 3
+.DontResB7
+	call DrawNumber
 	
-  bn PSW, 7, .copyloop
-  bp XBNK, 0, .exit
-	inc XBNK
-	set1 2, 7
-  br .copyloop
+	mov #$85, 2
+	ld SFRselect
+	and #$0F
+	st C
+	call DrawNumber
 	
-.exit:
+	clr1 Flags, 5
+.NoSFRnoRefresh:
+
+
+
+	; update mode name
+  bn Flags, 4, .NoModeRefresh
+	mov #<ModeNames, TRL
+	mov #>ModeNames, TRH
+	
 	mov #0, XBNK
-  ret
 	
-	
-	
-	
-DrawBitNumber: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	not1 CurrentFrame, 0
-	bp CurrentFrame, 0, .frame0
-	; otherwise frame 1 (dark)
-	mov #<BitNumbersDark, TRL
-	mov #>BitNumbersDark, TRH
-  br .gotocopy
-.frame0:
-	mov #<BitNumbersLight, TRL
-	mov #>BitNumbersLight, TRH
-.gotocopy:
-	
-	xor ACC
-	st XBNK
+	ld PokeMode
+	rol
+	rol
+	rol
 	st C
-	mov #$80, 2
-.copyloop:
-	ld C
-	ldc
-	st @r2
-	inc C
-	ld 2
-	add #6
-	st 2
 	
+	; this looks stupid but trust me
+	; a propper loop wouldn't be much better lol
+	
+	ldc
+	st $1B4
+	inc C
+	ld C
+	ldc
+	st $1B5
+	inc C
+	ld C
+	ldc
+	st $1BA
+	inc C
+	ld C
+	ldc
+	st $1BB
+	inc C
+	ld C
+	ldc
+	st $1C4
+	inc C
+	ld C
+	ldc
+	st $1C5
+	inc C
+	ld C
+	ldc
+	st $1CA
+	inc C
+	ld C
+	ldc
+	st $1CB
+	
+	clr1 Flags, 4
+.NoModeRefresh:
+	
+	
+	
+	; update cursor position
+  bn Flags, 3, .NoCursorRefresh
+	mov #0, XBNK ; clear last cursor position, really dumb but fast
+	clr1 $189, 1
+	clr1 $1A9, 1
+	clr1 $1C9, 1
+	clr1 $1E9, 1
+	inc XBNK	
+	clr1 $189, 1
+	clr1 $1A9, 1
+	clr1 $1C9, 1
+	clr1 $1E9, 1
+	
+	ld CursorInt ; this however is faster than just IF ELSEing all cursor positions
+	rorc
+	rorc
+	rorc
+	mov #0, ACC
+	rolc
+	st XBNK
+	
+	ld CursorInt
+	ror
+	ror
+	ror
+	or #%10001001
+	st 2
+	ld @r2
+	set1 ACC, 1
+	st @r2
+	
+	clr1 Flags, 3
+.NoCursorRefresh:
+	
+
+
+EndMain:
+	dec WaitCount
+	ld WaitCount
+  bnz .KeepOnLoop
+	mov #1, PCON
+.KeepOnLoop: 
+  jmp MainLoop
+
+
+
+DrawNumber: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; C = number
+; 2 = position
+
+	xor ACC
+	mov #5, B
+	mul
+	mov #2, B
+
+.loop:
 	ld C
 	ldc
 	st @r2
 	inc C
 	ld 2
-	add #10
+	add #$6
 	st 2
 
-  bn PSW, 7, .copyloop
-  bp XBNK, 0, .exit
+	ld C
+	ldc
+	st @r2
+	inc C
+	ld 2
+	add #$A
+	st 2
+
+	dec B
+	ld B
+  bnz .loop
+
+	ld C
+	ldc
+	st @r2
+
+  ret
+
+
+
+BitsDraw:  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; ACC = bits
+; C = current bit being drawn
+; B = numbers left
+; 2 = position
+; 3 = bits
+
+	mov #0, XBNK
+	mov #<ZeroIcon, TRL
+	mov #>ZeroIcon, TRH
+	mov #8, B
+	st 3
+
+.Loop:
+	; get what bit to draw
+	mov #0, C
+	ld 3
+	ror
+  bn ACC, 7, .ZeroBit
+	set1 C, 2
+.ZeroBit:
+	st 3
+	ld C
+	ldc
+	st @r2
+	ld 2
+	add #$6
+	st 2
+	inc C
+	
+	ld C
+	ldc
+	st @r2
+	ld 2
+	add #$A
+	st 2
+	inc C
+	
+	ld C
+	ldc
+	st @r2
+	ld 2
+	add #$10
+	st 2
+	
+	dec B
+	ld B
+  bz .Exit
+  bp 2, 7, .Loop
 	inc XBNK
 	set1 2, 7
-  br .copyloop
-	
-.exit:
-	mov #0, XBNK
-  jmpf backfrombitnumber
-	
-	
+  br .Loop	
+.Exit:
+  ret
+
+
+
+RowCopy:    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	ld C
+	ldc
+	st @r2
+	inc C
+	ld 2
+	add #$6
+	st 2
+
+	ld C
+	ldc
+	st @r2
+	inc C
+	ld 2
+	add #$A
+	st 2
+
+  bn PSW, 7, RowCopy
+  bp XBNK, 0, .Exit
+	mov #$80, 2
+	inc XBNK
+  br RowCopy
+.Exit:
+  ret
+
+
+
 ZeroIcon: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	.byte %01110000
 	.byte %10001000
 	.byte %01110000
+	.byte 0
 OneIcon:
 	.byte %01100000
 	.byte %00100000
 	.byte %11111000
+	.byte 0
+
+ReadIcon:
+	.byte %00110000
+	.byte %00101000
+	.byte %00110000
+	.byte %00101000
+	.byte %00101000
+	.byte %00101000
+WriteIcon:
+	.byte %10100000
+	.byte %10100000
+	.byte %10100000
+	.byte %11100000
+	.byte %11100000
+	.byte %10100000
+
 
 NumbersDisplay:
 	.byte %01111100 ; 0
@@ -638,92 +739,61 @@ NumbersDisplay:
 	.byte %10000000
 	.byte %10000000
 
-BitNumbersLight: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	.byte %00110000
-	.byte %01001000
-	.byte %01001000
-	.byte %00110000
-	.byte 0
-	.byte 0
-	.byte 0
-	.byte 0
-	.byte %01111000
-	.byte %00001000
-	.byte %00110000
-	.byte %01111000
-	.byte 0
-	.byte 0
-	.byte 0
-	.byte 0
-	.byte %00101000
-	.byte %01001000
-	.byte %01111000
-	.byte %00001000
-	.byte 0
-	.byte 0
-	.byte 0
-	.byte 0
-	.byte %01111000
-	.byte %01000000
-	.byte %01111000
-	.byte %01111000
-	.byte 0
-	.byte 0
-	.byte 0
-	.byte 0
 
-BitNumbersDark:
-	.byte %00110000
-	.byte %01001000
-	.byte %01001000
-	.byte %00110000
-	.byte %00110000
-	.byte %00010000
-	.byte %00010000
-	.byte %01111000
-	.byte %01111000
+BitNumbers:
+	.byte %11100000 ; 0
+	.byte %10100000
+	.byte %10100000
+	.byte %11100000
+	.byte %00011000 ;  1
 	.byte %00001000
-	.byte %00110000
-	.byte %01111000
-	.byte %01111000
-	.byte %00111000
 	.byte %00001000
-	.byte %01111000
-	.byte %00101000
-	.byte %01001000
-	.byte %01111000
-	.byte %00001000
-	.byte %01111000
-	.byte %01110000
-	.byte %00001000
-	.byte %01111000
-	.byte %01111000
-	.byte %01000000
-	.byte %01111000
-	.byte %01111000
-	.byte %01111000
-	.byte %00010000
+	.byte %00011100
+	.byte %11000000 ; 2
 	.byte %00100000
-	.byte %01000000
-	
-ModeNames:
-	.byte %11101110, %10101110
-	.byte %10101010, %11001100
-	.byte %11101010, %10101000
-	.byte %10001110, %10101110
+	.byte %11000000
+	.byte %11100000
+	.byte %00011100 ;  3
+	.byte %00001100
+	.byte %00000100
+	.byte %00011100
+	.byte %00100000 ; 4
+	.byte %10100000
+	.byte %11100000
+	.byte %00100000
+	.byte %00011100 ;  5
+	.byte %00011000
+	.byte %00000100
+	.byte %00011000
+	.byte %11100000 ; 6
+	.byte %10000000
+	.byte %11100000
+	.byte %11100000
+	.byte %00011100 ;  7
+	.byte %00000100
+	.byte %00001000 
+	.byte %00001000
 
-	.byte %10101110, %10111011
-	.byte %10101010, %10010011
-	.byte %11101100, %10010010
-	.byte %11101010, %10010011
-	
-	.byte %11101110, %01001100
-	.byte %10101100, %10101010
-	.byte %11001000, %11101010
-	.byte %10101110, %10101100
-	
-	.byte %11101010, %10111000
-	.byte %10101010, %10010000
+
+ModeNames:
+	.byte %01101110, %11000000 ; SFR
+	.byte %11001000, %10100000
+	.byte %00101100, %11000000
+	.byte %11101000, %10100000
+
+	.byte %10100100, %10010001 ; XRAM
+	.byte %01001001, %01011011
+	.byte %10101001, %11010101
+	.byte %10101001, %01010001
+
+	.byte %10011001, %10010010 ; ICON
+	.byte %10100010, %01011010
+	.byte %10100010, %01010110
+	.byte %10011001, %10010010
+
+	.byte %11101010, %10111000 ; EXIT
+	.byte %11000100, %10010000
+	.byte %10001010, %10010000
 	.byte %11101010, %10010000
-	.byte %00101110, %10010000
 	
+	.cnop 0, $200 
