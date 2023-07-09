@@ -20,5 +20,11 @@ assemble with Waterbear https://github.com/wtetzner/waterbear using the followin
 - B: Read the indicated SFR in the top right corner and store the result into the 'R' column
 - MODE: toggles between the app's own modes, see below
 
+## app modes
+- SFR: pokes hardware registers
+- XRAM: pokes the whole screen memory at the first 2 banks of XBNK (0 and 1)
+- ICON: pokes the last 2 banks of XBNK (2 and 3)
+- EXIT: goes back to the BIOS when pressing A
+
 ## NOTICE
 SFR.I is taken from https://github.com/jahan-addison/snake
