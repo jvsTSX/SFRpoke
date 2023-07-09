@@ -1,20 +1,24 @@
 # SFRpoke
-assemble with Waterbear https://github.com/wtetzner/waterbear
 
-controls when on SFR/test mode:
-- Down / Up: select the MSB of the SFR you want to test
-- Left / Right: select the LSB of the SFR you want to test
-- A: test/write/read/quit
-- B: enter bitmask edit mode
-- Sleep: cycle between POKE, WRITE, READ and QUIT modes
+## assembling
+assemble with Waterbear https://github.com/wtetzner/waterbear using the following command on your command line of preference `waterbear assemble SFRpoke.s -o SFRpoke.vms`
 
-controls when on bitmask edit mode: (the cursor should appear)
-- Down / Up: select the bit you want
-- A: flip the bit
-- B: go back to SFR/TEST mode
+## controls
+### per-mode controls, you can tell what mode you're on if you can see a little dot cursor showing up
+> On SFR select mode (no cursor)
+- Dpad right and left: adjust the indicated SFR's lower nibble
+- Dpad up and down: adjust the indicated SFR's upper nibble
+- SLEEP: go to Bit edit mode
 
-you can only cycle between POKE, WRITE, READ and QUIT when on SFR/test mode
+> On Bit edit mode (cursor showing up)
+- Dpad right and left: toggle bit
+- Dpad up and down: select bit
+- SLEEP: go to SFR select mode
 
-rows on POKE mode - leftmost: 0-write result, rightmost: 1-write result
+### common controls - these do the same function regardless of whether you're selecting bits or selecting SFR
+- A: Write 'W' column to the indicated SFR in the top right corner
+- B: Read the indicated SFR in the top right corner and store the result into the 'R' column
+- MODE: toggles between the app's own modes, see below
 
-NOTICE: SFR.I is taken from https://github.com/jahan-addison/snake
+## NOTICE
+SFR.I is taken from https://github.com/jahan-addison/snake
