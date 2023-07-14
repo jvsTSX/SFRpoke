@@ -1,7 +1,9 @@
 # SFRpoke
+<br><p align="left"><img src="https://github.com/jvsTSX/SFRpoke/blob/main/assets/SFRpoke_example.png?raw=true" alt="SFRpoke example" width="777" height="555"/>
 
 ## assembling
-assemble with Waterbear https://github.com/wtetzner/waterbear using the following command on your command line of preference `waterbear assemble SFRpoke.s -o SFRpoke.vms`
+use Waterbear assembler https://github.com/wtetzner/waterbear, and then making sure that `SFR.i`, `SFRpoke.s` and `SFRpoke_DCicon.gif`
+are all in the same folder type the following on your command line app of preference `waterbear assemble SFRpoke.s -o SFRpoke.vms`
 
 ## controls
 ### per-mode controls, you can tell what mode you're on if you can see a little dot cursor showing up
