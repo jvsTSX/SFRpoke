@@ -30,3 +30,8 @@ are all in the same folder type the following on your command line app of prefer
 
 ## NOTICE
 SFR.I is taken from https://github.com/jahan-addison/snake
+
+## Version log
+- 1.0 - initial version
+- 1.1 - reworked UI and rewrote the entire code from the ground up, now supports XRAM and ICON pokes
+- 1.2 - fixed a bug where poking PSW and C broke the program, changed fonts and added an animated icon visible on your dreamcast file manager or Elysian VMU file manager
