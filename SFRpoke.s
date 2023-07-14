@@ -33,9 +33,16 @@ goodbye:
 	.org $200
 	.byte "VMU SFR poke    " ; ................... 16-byte Title
 	.byte "by https://github.com/jvsTSX    " ; ... 32-byte Description
+	
 	.org $240 ; >>> ICON HEADER
-	.org $260 ; >>> PALETTE TABLE
-	.org $280 ; >>> ICON DATA
+	.include icon "SFRpoke_DCicon.gif"
+
+
+
+
+
+
+
 
 ;    /////////////////////////////////////////////////////////////
 ;   ///                       GAME CODE                       ///
@@ -65,8 +72,6 @@ Flags =         $F
 ; ////// START 
 Start: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	xor ACC
-;	st IE    ; disable ints to configure them first
-;	st P3INT ; i don't want joypad ints
 	mov #%10000000, VCCR ; LCD ON
 	mov #%00001001, MCR ; LCD REFRESH ON, LCD GRAPHICS MODE, 83HZ
 	mov #%10100001, OCR
@@ -155,12 +160,9 @@ SkipInputs:
 MainLoop: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; MAIN START
 	ld P3 ; get keys from port 3
 	st C
-	
-;	st $185 ; input test
 
 	ld LastKeys
   be C, SkipInputs
-	st B
 	ld C
 	st LastKeys
   be #$FF, SkipInputs ; whenever the routine enters on key release
@@ -268,6 +270,9 @@ BitEdit: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 CommonInputs:	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
   bp C, 4, .NoA ; write
+	push C   ; if you write to these, it breaks the app if you do
+	push PSW ; so backing 'em up just in case
+
 	ld SFRselect
 	st 2
   bp PokeMode, 1, .WrSecondhalf
@@ -288,6 +293,8 @@ CommonInputs:	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
   bn PokeMode, 0, .WrModeICON
 	set1 T1CNT, 7
 	set1 BTCR, 6
+	pop PSW
+	pop C
   jmpf goodbye ; or else EXIT
 	
 .WrModeICON:
@@ -300,6 +307,9 @@ CommonInputs:	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	ld PokeMask
 	st @r2
 	set1 Flags, 7
+	
+	pop PSW
+	pop C
 	
 	bn Flags, 0, .NoA
 	set1 Flags, 3
@@ -427,14 +437,6 @@ EnterMain: ; main loop starts at here for the first time, so graphics are initia
 	; a propper loop wouldn't be much better lol
 	
 	ldc
-	st $1B4
-	inc C
-	ld C
-	ldc
-	st $1B5
-	inc C
-	ld C
-	ldc
 	st $1BA
 	inc C
 	ld C
@@ -456,6 +458,14 @@ EnterMain: ; main loop starts at here for the first time, so graphics are initia
 	ld C
 	ldc
 	st $1CB
+	inc C
+	ld C
+	ldc
+	st $1D4
+	inc C
+	ld C
+	ldc
+	st $1D5
 	
 	clr1 Flags, 4
 .NoModeRefresh:
@@ -513,9 +523,9 @@ DrawNumber: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;
 ; 2 = position
 
 	xor ACC
-	mov #5, B
+	mov #6, B
 	mul
-	mov #2, B
+	mov #3, B
 
 .loop:
 	ld C
@@ -537,11 +547,6 @@ DrawNumber: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;
 	dec B
 	ld B
   bnz .loop
-
-	ld C
-	ldc
-	st @r2
-
   ret
 
 
@@ -661,25 +666,30 @@ NumbersDisplay:
 	.byte %01111100 ; 0
 	.byte %10001010
 	.byte %10010010
+	.byte %10010010
 	.byte %10100010
 	.byte %01111100
-	.byte %00110000 ; 1
+	.byte %00010000 ; 1
+	.byte %00110000
 	.byte %01010000
 	.byte %00010000
 	.byte %00010000
 	.byte %11111110
 	.byte %01111100 ; 2
 	.byte %10000010
-	.byte %00001100
-	.byte %01110000
+	.byte %00000010
+	.byte %00011100
+	.byte %01100000
 	.byte %11111110
 	.byte %01111100 ; 3
 	.byte %10000010
-	.byte %00011110
+	.byte %00011100
+	.byte %00000010
 	.byte %10000010
 	.byte %01111100
 	.byte %00100100 ; 4
 	.byte %01000100
+	.byte %10000100
 	.byte %11111110
 	.byte %00000100
 	.byte %00000100
@@ -687,8 +697,10 @@ NumbersDisplay:
 	.byte %10000000
 	.byte %11111100
 	.byte %00000010
-	.byte %11111100
-	.byte %01111100 ; 6
+	.byte %10000010
+	.byte %01111100
+	.byte %00111100 ; 6
+	.byte %01000000
 	.byte %10000000
 	.byte %11111100
 	.byte %10000010
@@ -698,44 +710,53 @@ NumbersDisplay:
 	.byte %00000100
 	.byte %00001000
 	.byte %00010000
-	.byte %01111100 ; 8
-	.byte %10000010
-	.byte %01111100
+	.byte %00100000
+	.byte %00111100 ; 8
+	.byte %01000010
+	.byte %00111100
+	.byte %11000010
 	.byte %10000010
 	.byte %01111100
 	.byte %01111100 ; 9
 	.byte %10000010
 	.byte %01111110
 	.byte %00000010
-	.byte %01111100
-	.byte %00010000 ; A
-	.byte %00101000
-	.byte %01000100
-	.byte %11111110
-	.byte %10000010
-	.byte %11111000 ; B
-	.byte %10000110
-	.byte %11111000
-	.byte %10000110
-	.byte %11111000
-	.byte %00111110 ; C
-	.byte %11000000
-	.byte %10000000
-	.byte %11000000
+	.byte %00000100
+	.byte %01111000
+	.byte %00000110 ; A
+	.byte %00001010
+	.byte %00010010
 	.byte %00111110
+	.byte %01000010
+	.byte %10000010
+	.byte %11111100 ; B
+	.byte %10000010
+	.byte %11111100
+	.byte %10000010
+	.byte %10000010
+	.byte %11111100
+	.byte %01111100 ; C
+	.byte %10000010
+	.byte %10000000
+	.byte %10000000
+	.byte %10000010
+	.byte %01111100
 	.byte %11111000 ; D
 	.byte %10000110
+	.byte %10000010
 	.byte %10000010
 	.byte %10000110
 	.byte %11111000
 	.byte %11111110 ; E
 	.byte %10000000
-	.byte %11111100
+	.byte %11111000
+	.byte %10000000
 	.byte %10000000
 	.byte %11111110
 	.byte %11111110 ; F
 	.byte %10000000
-	.byte %11111100
+	.byte %11111000
+	.byte %10000000
 	.byte %10000000
 	.byte %10000000
 
