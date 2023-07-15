@@ -1,5 +1,5 @@
 # SFRpoke
-<br><p align="left"><img src="https://github.com/jvsTSX/SFRpoke/blob/main/assets/SFRpoke_example.png?raw=true" alt="SFRpoke example" width="777" height="555"/>
+<br><p align="left"><img src="https://github.com/jvsTSX/SFRpoke/blob/main/assets/SFRpoke_example.png?" alt="SFRpoke example" width="850" height="555"/>
 
 ## assembling
 use Waterbear assembler https://github.com/wtetzner/waterbear, and then making sure that `SFR.i`, `SFRpoke.s` and `SFRpoke_DCicon.gif`
