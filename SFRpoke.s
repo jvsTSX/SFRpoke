@@ -23,26 +23,17 @@
 	mov #$F0, WaitCount
   reti
 
-
  	.org	$1F0 ; exit app mode
 goodbye:	
 	not1	EXT, 0
 	jmpf	goodbye
-  
-  
+
 	.org $200
 	.byte "VMU SFR poke    " ; ................... 16-byte Title
 	.byte "by https://github.com/jvsTSX    " ; ... 32-byte Description
-	
+
 	.org $240 ; >>> ICON HEADER
 	.include icon "SFRpoke_DCicon.gif"
-
-
-
-
-
-
-
 
 ;    /////////////////////////////////////////////////////////////
 ;   ///                       GAME CODE                       ///
@@ -86,7 +77,7 @@ Start: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;
 	st CursorInt
 	st PokeMask
 	st LastKeys
-	
+
 	clr1 T1CNT, 7
 	clr1 BTCR, 6
 	mov #%00000101, P3INT
@@ -95,29 +86,30 @@ Start: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;
 	mov #$80, 2
 	mov #0, XBNK
 .Loop:
-	mov #0, @r2 ; line 1
+	xor ACC
+	st @r2 ; line 1
 	inc 2
-	mov #0, @r2
+	st @r2
 	inc 2
-	mov #0, @r2
+	st @r2
 	inc 2
-	mov #0, @r2
+	st @r2
 	inc 2
-	mov #0, @r2
+	st @r2
 	inc 2
-	mov #0, @r2
+	st @r2
 	inc 2
-	mov #0, @r2 ; line 2
+	st @r2 ; line 2
 	inc 2
-	mov #0, @r2
+	st @r2
 	inc 2
-	mov #0, @r2
+	st @r2
 	inc 2
-	mov #0, @r2
+	st @r2
 	inc 2
-	mov #0, @r2
+	st @r2
 	inc 2
-	mov #0, @r2
+	st @r2
 	ld 2
 	add #5
 	st 2
@@ -135,7 +127,6 @@ Start: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;
 	mov #0, C
 	mov #$80, 2
 	mov #0, XBNK
-
 	call RowCopy ; draw the bits indication
 
 
@@ -145,13 +136,11 @@ Start: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;
 	mov #0, C
 	mov #$D1, 2
 	; XBNK is 1 already
-	
 	call RowCopy ; draw R icon
-	
 	mov #$D4, 2
 	call RowCopy ; draw W icon
-	
 	jmp EnterMain
+
 
 
 SkipInputs:
@@ -172,7 +161,7 @@ MainLoop: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;
 ; or else select	
 
 
-  bp C, 0, .NoUp    ; increment SFR selector's MSB
+  bp C, 0, .NoUp    ;;;;;;;;;;;;;;;;;;;;; increment SFR selector's MSB
 	ld SFRselect
 	add #$10
 	st SFRselect
@@ -180,7 +169,7 @@ MainLoop: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;
 .NoUp:
 
 
-  bp C, 1, .NoDown  ; decrement SFR selector's MSB
+  bp C, 1, .NoDown  ;;;;;;;;;;;;;;;;;;;;; decrement SFR selector's MSB
 	ld SFRselect
 	sub #$10
 	st SFRselect
@@ -188,31 +177,29 @@ MainLoop: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;
 .NoDown:
 
 
-  bp C, 2, .NoLeft  ; decrement SFR selector's LSB
+  bp C, 2, .NoLeft  ;;;;;;;;;;;;;;;;;;;;; decrement SFR selector's LSB
 	dec SFRselect
 	set1 Flags, 5
 .NoLeft:
 
 
-  bp C, 3, .NoRight ; increment SFR selector's LSB
+  bp C, 3, .NoRight ;;;;;;;;;;;;;;;;;;;;; increment SFR selector's LSB
 	inc SFRselect
 	set1 Flags, 5
 .NoRight:
 
 
-  bp C, 7, .NoSleep ; enter bit edit mode
+  bp C, 7, .NoSleep ;;;;;;;;;;;;;;;;;;;;; enter bit edit mode
 	not1 Flags, 0
 	set1 Flags, 3
 .NoSleep:
-
   br CommonInputs
 
 
 BitEdit: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  bp C, 0, .NoUp ; move cursor up
-	dec CursorInt
+  bp C, 0, .NoUp ;;;;;;;;;;;;;;;;;;;;;;;; move cursor up
 	ld CursorInt
-	and #%00000111
+	sub #%00100000
 	st CursorInt
 	ld CursorBit
 	ror
@@ -221,10 +208,9 @@ BitEdit: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 .NoUp:
 
 
-  bp C, 1, .NoDown ; move cursor down
-	inc CursorInt
+  bp C, 1, .NoDown ;;;;;;;;;;;;;;;;;;;;;; move cursor down
 	ld CursorInt
-	and #%00000111
+	add #%00100000
 	st CursorInt
 	ld CursorBit
 	rol
@@ -233,7 +219,7 @@ BitEdit: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 .NoDown:
 
 
-  bp C, 2, .NoLeft ; flip bit
+  bp C, 2, .NoLeft ;;;;;;;;;;;;;;;;;;;;;; flip bit
 	ld PokeMask
 	xor CursorBit
 	st PokeMask
@@ -242,7 +228,7 @@ BitEdit: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 .NoLeft:
 
 
-  bp C, 3, .NoRight ; flip bit
+  bp C, 3, .NoRight ;;;;;;;;;;;;;;;;;;;;; flip bit
 	ld PokeMask
 	xor CursorBit
 	st PokeMask
@@ -251,7 +237,7 @@ BitEdit: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 .NoRight:
 
 
-  bp C, 7, .NoSleep ; exit bit edit mode
+  bp C, 7, .NoSleep ;;;;;;;;;;;;;;;;;;;;; exit bit edit mode
 	not1 Flags, 0
 	mov #0, XBNK ; clear last cursor position, really dumb but fast
 	clr1 $189, 1
@@ -269,7 +255,7 @@ BitEdit: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 CommonInputs:	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  bp C, 4, .NoA ; write
+  bp C, 4, .NoA ;;;;;;;;;;;;;;;;;;;;;;;;; write
 	push C   ; if you write to these, it breaks the app if you do
 	push PSW ; so backing 'em up just in case
 
@@ -280,7 +266,7 @@ CommonInputs:	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	; or else SFR mode
 	clr1 2, 7
   br .WrEnd
-	
+
 .WrModeXRAM:
 	rolc
 	mov #0, ACC
@@ -288,7 +274,7 @@ CommonInputs:	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	st XBNK
 	set1 2, 7
   br .WrEnd
-	
+
 .WrSecondhalf:
   bn PokeMode, 0, .WrModeICON
 	set1 T1CNT, 7
@@ -296,7 +282,7 @@ CommonInputs:	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	pop PSW
 	pop C
   jmpf goodbye ; or else EXIT
-	
+
 .WrModeICON:
 	rolc
 	mov #1, ACC
@@ -307,17 +293,17 @@ CommonInputs:	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	ld PokeMask
 	st @r2
 	set1 Flags, 7
-	
+
 	pop PSW
 	pop C
-	
+
 	bn Flags, 0, .NoA
 	set1 Flags, 3
 .NoA:
 
 
 
-  bp C, 5, .NoB ; read
+  bp C, 5, .NoB ;;;;;;;;;;;;;;;;;;;;;;;;; read
 	ld SFRselect
 	st 2
   bp PokeMode, 1, .RdSecondHalf
@@ -325,7 +311,7 @@ CommonInputs:	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	; or else SFR mode
 	clr1 2, 7
   br .RdEnd
-	
+
 .RdModeXRAM:
 	rolc
 	mov #0, ACC
@@ -352,9 +338,9 @@ CommonInputs:	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	st SFRread
 	set1 Flags, 6
 .NoB:
-	
-	
-  bp C, 6, .NoMode ; change mode
+
+
+  bp C, 6, .NoMode ;;;;;;;;;;;;;;;;;;;;;; change mode
 	ld PokeMode
 	inc ACC
 	and #%00000011
@@ -362,34 +348,30 @@ CommonInputs:	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	set1 Flags, 4
 	set1 Flags, 5
 .NoMode:
-	
-	
-
 
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; GRAPHICS UPDATE
 EnterMain: ; main loop starts at here for the first time, so graphics are initialized propperly
 
-  bn Flags, 7, .NoWriteRowRefresh
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; update bit columns
+  bn Flags, 7, .NoWriteColRefresh
 	ld PokeMask
 	mov #$83, 2
 	call BitsDraw
 	clr1 Flags, 7
-.NoWriteRowRefresh:
+.NoWriteColRefresh:
 
-
-
-  bn Flags, 6, .NoReadRowRefresh
+  bn Flags, 6, .NoReadColRefresh
 	ld SFRread
 	mov #$82, 2
 	call BitsDraw
 	clr1 Flags, 6
-.NoReadRowRefresh:
+.NoReadColRefresh:
 
 
 
-	; update SFR number indicator
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; update SFR number indicator
   bn Flags, 5, .NoSFRnoRefresh
 	mov #<NumbersDisplay, TRL
 	mov #>NumbersDisplay, TRH
@@ -420,24 +402,19 @@ EnterMain: ; main loop starts at here for the first time, so graphics are initia
 
 
 
-	; update mode name
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; update mode name
   bn Flags, 4, .NoModeRefresh
 	mov #<ModeNames, TRL
 	mov #>ModeNames, TRH
-	
 	mov #0, XBNK
-	
 	ld PokeMode
 	rol
 	rol
 	rol
 	st C
-	
-	; this looks stupid but trust me
-	; a propper loop wouldn't be much better lol
-	
-	ldc
-	st $1BA
+
+	ldc         ; this looks stupid but trust me
+	st $1BA    	; a propper loop wouldn't be much better lol
 	inc C
 	ld C
 	ldc
@@ -469,10 +446,10 @@ EnterMain: ; main loop starts at here for the first time, so graphics are initia
 	
 	clr1 Flags, 4
 .NoModeRefresh:
-	
-	
-	
-	; update cursor position
+
+
+
+	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; update cursor position 
   bn Flags, 3, .NoCursorRefresh
 	mov #0, XBNK ; clear last cursor position, really dumb but fast
 	clr1 $189, 1
@@ -484,19 +461,13 @@ EnterMain: ; main loop starts at here for the first time, so graphics are initia
 	clr1 $1A9, 1
 	clr1 $1C9, 1
 	clr1 $1E9, 1
+
+	mov #0, XBNK  ; locate which half of the screen the cursor is at
+  bn CursorInt, 7, .XBNKlow 
+	inc XBNK
+.XBNKlow:
 	
-	ld CursorInt ; this however is faster than just IF ELSEing all cursor positions
-	rorc
-	rorc
-	rorc
-	mov #0, ACC
-	rolc
-	st XBNK
-	
-	ld CursorInt
-	ror
-	ror
-	ror
+	ld CursorInt ; draw cursor
 	or #%10001001
 	st 2
 	ld @r2
@@ -505,16 +476,20 @@ EnterMain: ; main loop starts at here for the first time, so graphics are initia
 	
 	clr1 Flags, 3
 .NoCursorRefresh:
-	
+
 
 
 EndMain:
+	; do main a few times before halting to save battery power
 	dec WaitCount
 	ld WaitCount
   bnz .KeepOnLoop
 	mov #1, PCON
 .KeepOnLoop: 
   jmp MainLoop
+
+
+
 
 
 
@@ -627,7 +602,7 @@ RowCopy:    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;
 
   bn PSW, 7, RowCopy
   bp XBNK, 0, .Exit
-	mov #$80, 2
+	set1 2, 7
 	inc XBNK
   br RowCopy
 .Exit:
