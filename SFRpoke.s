@@ -40,17 +40,19 @@ goodbye:
 ;  /////////////////////////////////////////////////////////////
 
 	.include "sfr.i" 
-LastKeys =      $5
-SFRselect =     $6
-SFRread =       $7
-PokeMask =      $8
-Dummy =         $9 ; to test open bus, a dummy write to RAM is done here before reading back the result
-PokeMode =      $A
-CursorInt =     $B
-CursorBit =     $C
-LastCurInt =    $D
-WaitCount =     $E ; will count some interations of the main loop and sleep when it hits zero
-Flags =         $F 
+CurrKeys =      $10
+LastKeys =      $11
+KeysDiff =      $12
+SFRselect =     $13
+SFRread =       $14
+PokeMask =      $15
+Dummy =         $16 ; to test open bus, a dummy write to RAM is done here before reading back the result
+PokeMode =      $17
+CursorInt =     $18
+CursorBit =     $19
+LastCurInt =    $1A
+WaitCount =     $1B ; will count some interations of the main loop and sleep when it hits zero
+Flags =         $1C 
 ; b7 = update 'W' row
 ; b6 = update 'R' row
 ; b5 = update SFR number
@@ -62,10 +64,11 @@ Flags =         $F
 	
 ; ////// START 
 Start: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	clr1 IE, 7
 	xor ACC
-	mov #%10000000, VCCR ; LCD ON
-	mov #%00001001, MCR ; LCD REFRESH ON, LCD GRAPHICS MODE, 83HZ
-	mov #%10100001, OCR
+;	mov #%10000000, VCCR ; LCD ON
+;	mov #%00001001, MCR ; LCD REFRESH ON, LCD GRAPHICS MODE, 83HZ
+	mov #%10100000, OCR
 
 	mov #%11110000, Flags
 	mov #$FF, LastCurInt
@@ -116,7 +119,7 @@ Start: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;
   bnz .Loop
   bp XBNK, 0, .LoopDone
 	inc XBNK
-	mov #80, 2
+	mov #$80, 2
   br .Loop
 .LoopDone:
 
@@ -147,21 +150,47 @@ SkipInputs:
   jmp EndMain
 
 MainLoop: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; MAIN START
-	ld P3 ; get keys from port 3
-	st C
+  bn OCR, 4, .NoDebounce ; check if the system is set to run from 1MHz or not
 
+	mov #$80, B ; debounce counter: take 128 samples
+	ld P3 ; initial sample
+.DebLoop:
+	bne P3, .MatchFail
+  dbnz B, .DebLoop
+  br .KeysStable
+	
+.MatchFail:
 	ld LastKeys
-  be C, SkipInputs
+  br .SkipThisSamp	
+
+.KeysStable:
+	st C
+	ld  CurrKeys
+	st  LastKeys
 	ld C
-	st LastKeys
-  be #$FF, SkipInputs ; whenever the routine enters on key release
+  br .DebounceDone
+
+.NoDebounce:
+	ld  CurrKeys
+	st  LastKeys
+	ld  P3
+.DebounceDone:
+	xor #$FF
+.SkipThisSamp:
+	st  CurrKeys
+	xor LastKeys
+	and CurrKeys
+	st  KeysDiff
+
+	ld KeysDiff
+  bz SkipInputs ; whenever the routine enters on key release
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; INPUTS
   bp Flags, 0, BitEdit 
 ; or else select	
 
 
-  bp C, 0, .NoUp    ;;;;;;;;;;;;;;;;;;;;; increment SFR selector's MSB
+  bn KeysDiff, 0, .NoUp    ;;;;;;;;;;;;;;;;;;;;; increment SFR selector's MSB
 	ld SFRselect
 	add #$10
 	st SFRselect
@@ -169,7 +198,7 @@ MainLoop: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;
 .NoUp:
 
 
-  bp C, 1, .NoDown  ;;;;;;;;;;;;;;;;;;;;; decrement SFR selector's MSB
+  bn KeysDiff, 1, .NoDown  ;;;;;;;;;;;;;;;;;;;;; decrement SFR selector's MSB
 	ld SFRselect
 	sub #$10
 	st SFRselect
@@ -177,19 +206,19 @@ MainLoop: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;
 .NoDown:
 
 
-  bp C, 2, .NoLeft  ;;;;;;;;;;;;;;;;;;;;; decrement SFR selector's LSB
+  bn KeysDiff, 2, .NoLeft  ;;;;;;;;;;;;;;;;;;;;; decrement SFR selector's LSB
 	dec SFRselect
 	set1 Flags, 5
 .NoLeft:
 
 
-  bp C, 3, .NoRight ;;;;;;;;;;;;;;;;;;;;; increment SFR selector's LSB
+  bn KeysDiff, 3, .NoRight ;;;;;;;;;;;;;;;;;;;;; increment SFR selector's LSB
 	inc SFRselect
 	set1 Flags, 5
 .NoRight:
 
 
-  bp C, 7, .NoSleep ;;;;;;;;;;;;;;;;;;;;; enter bit edit mode
+  bn KeysDiff, 7, .NoSleep ;;;;;;;;;;;;;;;;;;;;; enter bit edit mode
 	not1 Flags, 0
 	set1 Flags, 3
 .NoSleep:
@@ -197,7 +226,7 @@ MainLoop: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ;;;;;;;;;;;;;;;;;;;;;
 
 
 BitEdit: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  bp C, 0, .NoUp ;;;;;;;;;;;;;;;;;;;;;;;; move cursor up
+  bn KeysDiff, 0, .NoUp ;;;;;;;;;;;;;;;;;;;;;;;; move cursor up
 	ld CursorInt
 	sub #%00100000
 	st CursorInt
@@ -208,7 +237,7 @@ BitEdit: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 .NoUp:
 
 
-  bp C, 1, .NoDown ;;;;;;;;;;;;;;;;;;;;;; move cursor down
+  bn KeysDiff, 1, .NoDown ;;;;;;;;;;;;;;;;;;;;;; move cursor down
 	ld CursorInt
 	add #%00100000
 	st CursorInt
@@ -219,7 +248,7 @@ BitEdit: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 .NoDown:
 
 
-  bp C, 2, .NoLeft ;;;;;;;;;;;;;;;;;;;;;; flip bit
+  bn KeysDiff, 2, .NoLeft ;;;;;;;;;;;;;;;;;;;;;; flip bit
 	ld PokeMask
 	xor CursorBit
 	st PokeMask
@@ -228,7 +257,7 @@ BitEdit: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 .NoLeft:
 
 
-  bp C, 3, .NoRight ;;;;;;;;;;;;;;;;;;;;; flip bit
+  bn KeysDiff, 3, .NoRight ;;;;;;;;;;;;;;;;;;;;; flip bit
 	ld PokeMask
 	xor CursorBit
 	st PokeMask
@@ -237,7 +266,7 @@ BitEdit: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 .NoRight:
 
 
-  bp C, 7, .NoSleep ;;;;;;;;;;;;;;;;;;;;; exit bit edit mode
+  bn KeysDiff, 7, .NoSleep ;;;;;;;;;;;;;;;;;;;;; exit bit edit mode
 	not1 Flags, 0
 	mov #0, XBNK ; clear last cursor position, really dumb but fast
 	clr1 $189, 1
@@ -255,7 +284,7 @@ BitEdit: ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 CommonInputs:	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  bp C, 4, .NoA ;;;;;;;;;;;;;;;;;;;;;;;;; write
+  bn KeysDiff, 4, .NoA ;;;;;;;;;;;;;;;;;;;;;;;;; write
 	push C   ; if you write to these, it breaks the app if you do
 	push PSW ; so backing 'em up just in case
 
@@ -292,7 +321,7 @@ CommonInputs:	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 .WrEnd:
 	ld PokeMask
 	st @r2
-	set1 Flags, 7
+;	set1 Flags, 7
 
 	pop PSW
 	pop C
@@ -303,7 +332,7 @@ CommonInputs:	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 
-  bp C, 5, .NoB ;;;;;;;;;;;;;;;;;;;;;;;;; read
+  bn KeysDiff, 5, .NoB ;;;;;;;;;;;;;;;;;;;;;;;;; read
 	ld SFRselect
 	st 2
   bp PokeMode, 1, .RdSecondHalf
@@ -340,7 +369,7 @@ CommonInputs:	;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 .NoB:
 
 
-  bp C, 6, .NoMode ;;;;;;;;;;;;;;;;;;;;;; change mode
+  bn KeysDiff, 6, .NoMode ;;;;;;;;;;;;;;;;;;;;;; change mode
 	ld PokeMode
 	inc ACC
 	and #%00000011
@@ -480,12 +509,14 @@ EnterMain: ; main loop starts at here for the first time, so graphics are initia
 
 
 EndMain:
+	set1 IE, 7
 	; do main a few times before halting to save battery power
 	dec WaitCount
 	ld WaitCount
   bnz .KeepOnLoop
 	mov #1, PCON
 .KeepOnLoop: 
+	clr1 IE, 7
   jmp MainLoop
 
 
