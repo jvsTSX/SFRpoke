@@ -35,3 +35,4 @@ SFR.I is taken from https://github.com/jahan-addison/snake
 - 1.0 - initial version
 - 1.1 - reworked UI and rewrote the entire code from the ground up, now supports XRAM and ICON pokes
 - 1.2 - fixed a bug where poking PSW and C broke the program, changed fonts and added an animated icon visible on your dreamcast file manager or Elysian VMU file manager
+- 1.3 - fixed player inputs in general, keys now no longer re-trigger if you are holding another one and there is no bouncing errors when setting the system to 1MHz or 500KHz clock rates
